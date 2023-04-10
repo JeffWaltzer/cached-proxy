@@ -6,3 +6,5 @@ source 'https://rubygems.org'
 gem 'aws'
 gem 'rspec'
 gem 'rubocop'
+gem 'rake'
+
