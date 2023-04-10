@@ -5,7 +5,7 @@ require 'aws-sdk-dynamodb'
 
 # Set up a cache using AWS DynamoDB
 dynamodb = Aws::DynamoDB::Client.new
-cache_table_name = "cache-table"
+cache_table_name = 'cache-table'
 cache_table = Aws::DynamoDB::Table.new(cache_table_name)
 
 def lambda_handler(event:, context:)
@@ -20,7 +20,7 @@ def lambda_handler(event:, context:)
 
   # Check if the response is already in the cache
   begin
-    response = cache_table.get_item(key: { cache_key: cache_key })
+    response = cache_table.get_item(key: { cache_key: })
     if response.item
       # If the response is in the cache, return it
       return {
@@ -28,9 +28,9 @@ def lambda_handler(event:, context:)
         statusDescription: 'OK',
         headers: {
           'cache-hit': [{
-                          key: 'Cache-Hit',
-                          value: 'true'
-                        }]
+            key: 'Cache-Hit',
+            value: 'true'
+          }]
         },
         body: response.item['response_body']
       }
@@ -47,31 +47,33 @@ def lambda_handler(event:, context:)
     headers.each do |name, value|
       origin_request[name] = value[0]['value']
     end
-    origin_response = Net::HTTP.start(origin_uri.hostname, origin_uri.port, use_ssl: true, verify_mode: OpenSSL::SSL::VERIFY_PEER) {|http| http.request(origin_request)}
+    origin_response = Net::HTTP.start(origin_uri.hostname, origin_uri.port, use_ssl: true,
+                                                                            verify_mode: OpenSSL::SSL::VERIFY_PEER) do |http|
+      http.request(origin_request)
+    end
     origin_response_body = origin_response.body
     origin_status_code = origin_response.code
 
     # Add the response to the cache
     cache_table.put_item(item: {
-      cache_key: cache_key,
-      response_body: origin_response_body
-    })
+                           cache_key:,
+                           response_body: origin_response_body
+                         })
 
     # Return the response from the origin
-    return {
+    {
       status: origin_status_code,
       statusDescription: 'OK',
       headers: {
         'cache-hit': [{
-                        key: 'Cache-Hit',
-                        value: 'false'
-                      }]
+          key: 'Cache-Hit',
+          value: 'false'
+        }]
       },
       body: origin_response_body
     }
-
   rescue StandardError => e
-    return {
+    {
       status: '500',
       statusDescription: 'Error',
       body: "Error: #{e}"
