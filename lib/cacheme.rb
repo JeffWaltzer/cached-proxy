@@ -1,82 +1,45 @@
-require 'json'
-require 'net/http'
-require 'openssl'
-require 'aws-sdk-dynamodb'
+# frozen_string_literal: true
 
-# Set up a cache using AWS DynamoDB
-dynamodb = Aws::DynamoDB::Client.new
-cache_table_name = 'cache-table'
-cache_table = Aws::DynamoDB::Table.new(cache_table_name)
-
-def lambda_handler(event:, context:)
-  # Extract the request parameters from the event
+def call(event:, context:)
   request = event['Records'][0]['cf']['request']
-  headers = request['headers']
-  query_string = request['querystring']
-  uri = request['uri']
+  response = cached_response(request) || origin_response(request)
+  build_response(response.code, response.body, cached: !!cached_response)
+rescue StandardError => e
+  build_response(500, "Error: #{e}", cached: false)
+end
 
-  # Generate a cache key for this request
-  cache_key = Digest::MD5.hexdigest(uri + query_string)
+private
 
-  # Check if the response is already in the cache
-  begin
-    response = cache_table.get_item(key: { cache_key: })
-    if response.item
-      # If the response is in the cache, return it
-      return {
-        status: '200',
-        statusDescription: 'OK',
-        headers: {
-          'cache-hit': [{
-            key: 'Cache-Hit',
-            value: 'true'
-          }]
-        },
-        body: response.item['response_body']
-      }
-    end
-  rescue Aws::DynamoDB::Errors::ServiceError => e
-    puts "Error getting item from cache: #{e}"
+def cached_response(request)
+  cache_key = generate_cache_key(request['uri'], request['querystring'])
+  response_body = dynamodb.get_item(key: { cache_key: }).item&.[]('response_body')
+  return nil unless response_body
+
+  build_response(200, response_body, cached: true)
+rescue Aws::DynamoDB::Errors::ServiceError => e
+  puts "Error getting item from cache: #{e}"
+  nil
+end
+
+def origin_response(request)
+  origin_url = "#{request['uri']}?#{request['querystring']}"
+  origin_uri = URI(origin_url)
+  origin_request = Net::HTTP::Get.new(origin_uri)
+  request['headers'].each { |name, value| origin_request[name] = value[0]['value'] }
+  response = Net::HTTP.start(origin_uri.hostname, origin_uri.port, use_ssl: true,
+                             verify_mode: OpenSSL::SSL::VERIFY_PEER) do |http|
+    http.request(origin_request)
   end
-
-  # If the response is not in the cache, make the request to the origin
-  begin
-    origin_url = "#{uri}?#{query_string}"
-    origin_uri = URI(origin_url)
-    origin_request = Net::HTTP::Get.new(origin_uri)
-    headers.each do |name, value|
-      origin_request[name] = value[0]['value']
-    end
-    origin_response = Net::HTTP.start(origin_uri.hostname, origin_uri.port, use_ssl: true,
-                                                                            verify_mode: OpenSSL::SSL::VERIFY_PEER) do |http|
-      http.request(origin_request)
-    end
-    origin_response_body = origin_response.body
-    origin_status_code = origin_response.code
-
-    # Add the response to the cache
-    cache_table.put_item(item: {
-                           cache_key:,
-                           response_body: origin_response_body
-                         })
-
-    # Return the response from the origin
-    {
-      status: origin_status_code,
-      statusDescription: 'OK',
-      headers: {
-        'cache-hit': [{
-          key: 'Cache-Hit',
-          value: 'false'
-        }]
-      },
-      body: origin_response_body
-    }
-  rescue StandardError => e
-    {
-      status: '500',
-      statusDescription: 'Error',
-      body: "Error: #{e}"
-    }
-  end
+  cache_key = generate_cache_key(request['uri'], request['querystring'])
+  cache_response(cache_key, response.body) if response.code == '200'
+  response
+end
+q
+def build_response(status_code, body, cached:)
+  {
+    status: status_code.to_s,
+    statusDescription: 'OK',
+    headers: { 'cache-hit': [{ key: 'Cache-Hit', value: cached.to_s }] },
+    body:
+  }
 end
