@@ -1,7 +1,9 @@
+# frozen_string_literal: true
+
 require 'uri'
 require 'net/http'
 require 'spec_helper'
-require_relative  '../lib/cache_proxy'
+require_relative '../lib/cache_proxy'
 
 describe 'Lambda function' do
   describe '#origin_response' do
@@ -30,7 +32,8 @@ describe 'Lambda function' do
     end
 
     it 'makes a request to the correct URL' do
-      expect(Net::HTTP).to receive(:start).with(uri.hostname, uri.port, use_ssl: true, verify_mode: OpenSSL::SSL::VERIFY_PEER)
+      expect(Net::HTTP).to receive(:start).with(uri.hostname, uri.port, use_ssl: true,
+                                                                        verify_mode: OpenSSL::SSL::VERIFY_PEER)
       subject.origin_response(request)
     end
   end

@@ -1,12 +1,13 @@
+# frozen_string_literal: true
+
 require 'uri'
 require 'net/http'
 require 'spec_helper'
-require_relative  '../lib/cache_proxy'
-
+require_relative '../lib/cache_proxy'
 
 RSpec.describe 'Lambda function' do
   describe '#build_response' do
-    subject {CacheProxy.new}
+    subject { CacheProxy.new }
     it 'returns a Hash with the expected keys' do
       response = subject.build_response(200, 'OK', cached: true)
       expect(response).to include(:status, :statusDescription, :headers, :body)

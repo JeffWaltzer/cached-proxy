@@ -1,6 +1,6 @@
+# frozen_string_literal: true
+
 class CacheProxy
-
-
   def cached_response(request)
     cache_key = generate_cache_key(request['uri'], request['querystring'])
     response_body = dynamodb.get_item(key: { cache_key: }).item&.[]('response_body')
@@ -55,5 +55,4 @@ class CacheProxy
       body:
     }
   end
-
 end

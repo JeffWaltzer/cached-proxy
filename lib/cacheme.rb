@@ -10,4 +10,3 @@ def call(event:, context:)
 rescue StandardError => e
   cache_proxy.build_response(500, "Error: #{e}", cached: false)
 end
-
